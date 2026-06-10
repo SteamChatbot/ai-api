@@ -1,20 +1,45 @@
+### Spring Boot ###
 HELP.md
-.gradle/
+.gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+### 환경변수 / 시크릿 ###
+.env
+*.env
+application-local.yml
+application-secret.yml
+
+### 로그 ###
+*.log
+logs/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
 ### IntelliJ IDEA ###
-.idea/
+.idea
 *.iws
 *.iml
 *.ipr
 out/
+!**/src/main/**/out/
+!**/src/test/**/out/
 
 ### VS Code ###
 .vscode/
-
-### Spring Boot ###
-application-*.yml
-application-*.properties

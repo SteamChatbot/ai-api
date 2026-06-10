@@ -1,40 +1,43 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.2.5'
-	id 'io.spring.dependency-management' version '1.1.5'
+	id 'org.springframework.boot' version '3.5.14'      // 실행 가능한 JAR 패키징 + Spring Boot 자동 설정
+	id 'io.spring.dependency-management' version '1.1.7' // 의존성 버전 자동 관리 (BOM 기반, 버전 직접 명시 불필요)
 }
 
-group = 'com.sanavi'
+group = 'com.sanavi'   // 패키지 최상위 그룹 (com.sanavi.backend)
 version = '0.0.1-SNAPSHOT'
 
 java {
-	sourceCompatibility = '17'
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17) // Java 17 LTS 
+	}
 }
 
 configurations {
 	compileOnly {
-		extendsFrom annotationProcessor
+		extendsFrom annotationProcessor // Lombok 등 annotationProcessor를 compileOnly에도 적용
 	}
 }
 
 repositories {
-	mavenCentral()
+	mavenCentral() // 의존성 다운로드 저장소
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
-	runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'org.springframework.security:spring-security-test'
+	implementation 'org.springframework.boot:spring-boot-starter-web'           // REST API (Spring MVC, Tomcat 내장)
+	implementation 'org.springframework.boot:spring-boot-starter-security'      // 인증/인가 (JWT 필터 체인, CORS 등)
+	implementation 'org.springframework.boot:spring-boot-starter-validation'    // 요청값 검증 (@Valid, @NotBlank 등)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'    // Redis 연동 (RefreshToken 저장)
+	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.4' // MyBatis ORM (XML 매퍼, SQL 직접 작성)
+	runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'                         // MariaDB JDBC 드라이버 (런타임만 필요)
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'                           // JWT 생성·파싱 API
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'                             // jjwt 구현체 (런타임만 필요)
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'                          // jjwt JSON 직렬화 (Jackson 연동)
+	compileOnly 'org.projectlombok:lombok'                                      // @Getter/@Setter/@Builder 등 
+	annotationProcessor 'org.projectlombok:lombok'                              // Lombok 컴파일 타임 코드 생성
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'      // JUnit5, Mockito 등 테스트 기본 셋
+	testImplementation 'org.springframework.security:spring-security-test'      // Security 테스트 지원 (@WithMockUser 등)
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'                // JUnit 플랫폼 실행기
 }
 
 tasks.named('test') {
