@@ -4,7 +4,7 @@ plugins {
 	id 'io.spring.dependency-management' version '1.1.7' // 의존성 버전 자동 관리 (BOM 기반, 버전 직접 명시 불필요)
 }
 
-group = 'com.sanavi'   // 패키지 최상위 그룹 (com.sanavi.backend)
+group = 'com.sanavi'   // 패키지 최상위 그룹 (com.sanavi.aiapi)
 version = '0.0.1-SNAPSHOT'
 
 java {

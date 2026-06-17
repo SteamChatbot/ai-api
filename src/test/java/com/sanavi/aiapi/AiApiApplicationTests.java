@@ -1,10 +1,10 @@
-package com.sanavi.backend;
+package com.sanavi.aiapi;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class BackendApplicationTests {
+class AiApiApplicationTests {
 
 	@Test
 	void contextLoads() {

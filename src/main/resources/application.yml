@@ -1,8 +1,24 @@
+server:
+  port: 8080
+
+ai-fastapi:
+  url: http://localhost:8000
+
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+  # DB/Redis 설정 — 로그인 기능 구현 시 활성화
   datasource:
     url: jdbc:mariadb://localhost:3306/main_db?characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    username: ${DB_USERNAME:dev}
+    password: ${DB_PASSWORD:dev}
     driver-class-name: org.mariadb.jdbc.Driver
 
   data:
@@ -12,11 +28,11 @@ spring:
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
-  type-aliases-package: com.sanavi.backend
+  type-aliases-package: com.sanavi.aiapi
   configuration:
     map-underscore-to-camel-case: true
 
-jwt:
-  secret: ${JWT_SECRET}
-  access-token-expiry: 1800000
-  refresh-token-expiry: 604800000
+# jwt:
+#   secret: ${JWT_SECRET:dev-secret-placeholder}
+#   access-token-expiry: 1800000
+#   refresh-token-expiry: 604800000
