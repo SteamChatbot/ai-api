@@ -1,25 +1,17 @@
 package com.sanavi.aiapi.analysis.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Getter;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
-@Getter
+@Data
+@Builder
+@AllArgsConstructor
 @NoArgsConstructor
 public class AnalysisResponseDto {
-
-    @JsonProperty("base_score")
-    private float baseScore;
-
-    @JsonProperty("chat_content")
-    private String chatContent;
-
-    private List<ChecklistItemDto> checklist;
-
-    private List<String> warning;
-
-    @JsonProperty("meta_content")
-    private List<String> metaContent;
+    private boolean success; //성공여부
+    private String message; //에러메세지
+    private String status; //요청상태
+    private AnalysisDataDto data; //요청데이타
 }
