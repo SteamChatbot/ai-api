@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+// FastAPI → Spring → React: 폴링 응답 — status(PROCESSING/COMPLETED/ERROR)와 분석 data를 감싸는 외부 DTO
 @Data
 @Builder
 @AllArgsConstructor

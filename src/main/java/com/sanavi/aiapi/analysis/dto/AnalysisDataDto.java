@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 
+// FastAPI → Spring: 분석 완료 시 실제 결과 데이터 — AnalysisResponseDto.data 필드로 중첩됨
 @Data
 @Builder
 @AllArgsConstructor

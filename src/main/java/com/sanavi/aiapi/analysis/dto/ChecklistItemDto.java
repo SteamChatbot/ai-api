@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+// FastAPI → Spring → ai_db: 증거 체크리스트 단일 항목 — AnalysisDataDto.checklist 요소 및 DB 삽입에 공용
 @EqualsAndHashCode
 @Data
 @Builder

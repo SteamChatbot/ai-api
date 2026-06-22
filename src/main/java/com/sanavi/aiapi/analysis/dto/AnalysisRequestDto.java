@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 
 
+// React → Spring: 분석 요청 시 유저가 입력한 정보를 담는 DTO
 @EqualsAndHashCode
 @Data
 @Builder
