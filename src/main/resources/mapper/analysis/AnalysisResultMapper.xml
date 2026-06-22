@@ -45,4 +45,19 @@
         </foreach>
     </insert>
 
+    <!-- Input:  userId / Output: AnalysisHistoryItemDto 목록 / 책임: 유저별 분석 이력 최신순 조회 (deleted=1만) -->
+    <select id="findHistoryByUserId" resultType="com.sanavi.aiapi.analysis.dto.AnalysisHistoryItemDto">
+        SELECT id, disease, job, base_score, created_at
+        FROM analysis_result
+        WHERE user_id = #{userId} AND deleted = 1
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- Input:  id, userId / Output: 변경 행 수 / 책임: 논리 삭제 (deleted=0) — userId 불일치 시 0 반환 -->
+    <update id="softDeleteById">
+        UPDATE analysis_result
+        SET deleted = 0
+        WHERE id = #{id} AND user_id = #{userId} AND deleted = 1
+    </update>
+
 </mapper>

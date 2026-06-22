@@ -3,6 +3,7 @@ package com.sanavi.aiapi.analysis.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sanavi.aiapi.analysis.dto.AnalysisAcceptedDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisDataDto;
+import com.sanavi.aiapi.analysis.dto.AnalysisHistoryItemDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisRequestDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisResponseDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisResultDto;
@@ -21,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Collections;
 
 @Service
 @RequiredArgsConstructor
@@ -30,12 +32,12 @@ public class AnalysisServiceImpl implements AnalysisService {
     private final ObjectMapper objectMapper;
     private final AnalysisResultMapper analysisResultMapper;
 
-    // Input:  AnalysisRequestDto (유저 입력값)
+    // Input:  AnalysisRequestDto (유저 입력값) + userId (X-User-Id 헤더, 비로그인 시 null)
     // Output: AnalysisAcceptedDto (task_id, status="PROCESSING")
     // 책임:   FastAPI에 분석 요청 중계 → task_id 수신 → ai_db analysis_result 초기 레코드 삽입
     @Override
     @Transactional
-    public AnalysisAcceptedDto requestAnalysis(AnalysisRequestDto request) {
+    public AnalysisAcceptedDto requestAnalysis(AnalysisRequestDto request, String userId) {
         try {
             AnalysisAcceptedDto accepted = fastApiClient.post()
                 .uri("/api/analysis")
@@ -44,10 +46,12 @@ public class AnalysisServiceImpl implements AnalysisService {
                 .retrieve()
                 .body(AnalysisAcceptedDto.class);
 
+            String resolvedUserId = (userId != null && !userId.isBlank()) ? userId : null;
+
             analysisResultMapper.insertAnalysisResult(
                 AnalysisResultDto.builder()
                     .id(accepted.getTaskId())
-                    .userId(null) // auth 구현 후 추가 default null
+                    .userId(resolvedUserId)
                     .disease(request.getDisease())
                     .inspector(request.getInspector())
                     .job(request.getJob())
@@ -122,6 +126,27 @@ public class AnalysisServiceImpl implements AnalysisService {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
+        }
+    }
+
+    // Input:  userId (로그인 유저 ID)
+    // Output: List<AnalysisHistoryItemDto> — 빈 리스트 (비로그인) 또는 최신순 이력
+    // 책임:   userId 유효성 확인 후 ai_db 이력 조회 위임
+    @Override
+    public List<AnalysisHistoryItemDto> getMyHistory(String userId) {
+        if (userId == null || userId.isBlank()) return Collections.emptyList();
+        return analysisResultMapper.findHistoryByUserId(userId);
+    }
+
+    // Input:  taskId (analysis_result PK), userId (소유권 검증용)
+    // Output: void — 성공 시 정상 종료, 실패 시 404 예외
+    // 책임:   논리 삭제 (deleted=0) — userId 불일치 시 404
+    @Override
+    @Transactional
+    public void softDeleteAnalysis(String taskId, String userId) {
+        int affected = analysisResultMapper.softDeleteById(taskId, userId);
+        if (affected == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "분석 결과를 찾을 수 없거나 권한이 없습니다.");
         }
     }
 
