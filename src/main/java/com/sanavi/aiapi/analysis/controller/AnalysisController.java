@@ -3,6 +3,8 @@ package com.sanavi.aiapi.analysis.controller;
 import com.sanavi.aiapi.analysis.dto.AnalysisAcceptedDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisRequestDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisResponseDto;
+import com.sanavi.aiapi.analysis.dto.ChatRequestDto;
+import com.sanavi.aiapi.analysis.dto.ChatResponseDto;
 import com.sanavi.aiapi.analysis.service.AnalysisService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,13 +24,27 @@ public class AnalysisController {
 
     private final AnalysisService analysisService;
 
+    // Input:  AnalysisRequestDto (이름, 나이, 직업, 질병, 사고경위)
+    // Output: AnalysisAcceptedDto (task_id, status="PROCESSING")
+    // 책임:   FastAPI에 분석 요청 중계 + ai_db에 초기 레코드 삽입
     @PostMapping
     public ResponseEntity<AnalysisAcceptedDto> requestAnalysis(@RequestBody @Valid AnalysisRequestDto request) {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(analysisService.requestAnalysis(request));
     }
 
+    // Input:  taskId (UUID — analysis_result PK)
+    // Output: AnalysisResponseDto (status, data)
+    // 책임:   FastAPI Redis에서 분석 결과 조회 + COMPLETED 시 ai_db에 결과 저장 (중복 방지)
     @GetMapping("/{taskId}")
     public ResponseEntity<AnalysisResponseDto> getAnalysisResult(@PathVariable String taskId) {
         return ResponseEntity.ok(analysisService.getAnalysisResult(taskId));
+    }
+
+    // Input:  ChatRequestDto (context, history, question)
+    // Output: ChatResponseDto (answer)
+    // 책임:   브라우저 캐시 컨텍스트 + 대화 히스토리를 FastAPI에 중계해 AI 추가 질의 응답
+    @PostMapping("/chat")
+    public ResponseEntity<ChatResponseDto> chat(@RequestBody @Valid ChatRequestDto request) {
+        return ResponseEntity.ok(analysisService.chatWithAdvisor(request));
     }
 }
