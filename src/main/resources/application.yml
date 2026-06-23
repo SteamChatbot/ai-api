@@ -13,6 +13,11 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: Asia/Seoul
+
 #모델 url
 ai-fastapi:
   url: ${FASTAPI_URL:http://localhost:8000}
