@@ -1,3 +1,6 @@
+server:
+  port: 8081
+
 spring:
   datasource:
     url: jdbc:mariadb://${AI_DB_HOST}:3306/ai_db?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&sslMode=trust
