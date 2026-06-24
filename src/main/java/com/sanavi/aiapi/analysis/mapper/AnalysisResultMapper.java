@@ -1,5 +1,6 @@
 package com.sanavi.aiapi.analysis.mapper;
 
+import com.sanavi.aiapi.analysis.dto.AnalysisDataDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisHistoryItemDto;
 import com.sanavi.aiapi.analysis.dto.AnalysisResultDto;
 import com.sanavi.aiapi.analysis.dto.ChecklistItemDto;
@@ -19,4 +20,9 @@ public interface AnalysisResultMapper {
     void insertMetaContents(@Param("resultId") String resultId, @Param("metaContents") List<String> metaContents);
     List<AnalysisHistoryItemDto> findHistoryByUserId(@Param("userId") String userId);
     int softDeleteById(@Param("id") String id, @Param("userId") String userId);
+
+    AnalysisDataDto findBaseByTaskId(@Param("taskId") String taskId);
+    List<ChecklistItemDto> findChecklistByResultId(@Param("resultId") String resultId);
+    List<String> findWarningsByResultId(@Param("resultId") String resultId);
+    List<String> findMetaContentsByResultId(@Param("resultId") String resultId);
 }
