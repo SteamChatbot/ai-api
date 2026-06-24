@@ -16,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -65,6 +66,8 @@ public class AnalysisServiceImpl implements AnalysisService {
 
         } catch (HttpClientErrorException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
+        } catch (HttpServerErrorException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI 서버 오류: " + extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
         }
@@ -110,6 +113,8 @@ public class AnalysisServiceImpl implements AnalysisService {
 
         } catch (HttpClientErrorException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
+        } catch (HttpServerErrorException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI 서버 오류: " + extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
         }
@@ -129,6 +134,8 @@ public class AnalysisServiceImpl implements AnalysisService {
                 .body(ChatResponseDto.class);
         } catch (HttpClientErrorException e) {
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
+        } catch (HttpServerErrorException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI 서버 오류: " + extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
         }

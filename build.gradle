@@ -9,7 +9,7 @@ version = '0.0.1-SNAPSHOT'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(17) // Java 17 LTS 
+		languageVersion = JavaLanguageVersion.of(17) // Java 17 LTS
 	}
 }
 
@@ -25,6 +25,7 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'           // REST API (Spring MVC, Tomcat 내장)
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'      // Spring Boot Dashboard 감지 및 모니터링
 	implementation 'org.springframework.boot:spring-boot-starter-security'      // 인증/인가 (JWT 필터 체인, CORS 등)
 	implementation 'org.springframework.boot:spring-boot-starter-validation'    // 요청값 검증 (@Valid, @NotBlank 등)
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'    // Redis 연동 (RefreshToken 저장)
