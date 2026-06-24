@@ -40,6 +40,10 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'                // JUnit 플랫폼 실행기
 }
 
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs << '-parameters'
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 }

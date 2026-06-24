@@ -45,7 +45,7 @@ public class AnalysisController {
     // Output: AnalysisResponseDto (status, data)
     // 책임:   FastAPI Redis에서 분석 결과 조회 + COMPLETED 시 ai_db에 결과 저장 (중복 방지)
     @GetMapping("/{taskId}")
-    public ResponseEntity<AnalysisResponseDto> getAnalysisResult(@PathVariable String taskId) {
+    public ResponseEntity<AnalysisResponseDto> getAnalysisResult(@PathVariable("taskId") String taskId) {
         return ResponseEntity.ok(analysisService.getAnalysisResult(taskId));
     }
 
@@ -61,7 +61,7 @@ public class AnalysisController {
     // Output: List<AnalysisHistoryItemDto> (id, disease, job, baseScore, createdAt)
     // 책임:   ai_db에서 해당 유저의 분석 이력 최신순 조회
     @GetMapping("/history/{userId}")
-    public ResponseEntity<List<AnalysisHistoryItemDto>> getHistory(@PathVariable String userId) {
+    public ResponseEntity<List<AnalysisHistoryItemDto>> getHistory(@PathVariable("userId") String userId) {
         return ResponseEntity.ok(analysisService.getMyHistory(userId));
     }
 
@@ -70,8 +70,8 @@ public class AnalysisController {
     // 책임:   논리 삭제 (deleted=0) — userId 불일치 시 404
     @DeleteMapping("/{taskId}")
     public ResponseEntity<Void> deleteAnalysis(
-            @PathVariable String taskId,
-            @RequestParam String userId) {
+            @PathVariable("taskId") String taskId,
+            @RequestParam("userId") String userId) {
         analysisService.softDeleteAnalysis(taskId, userId);
         return ResponseEntity.noContent().build();
     }

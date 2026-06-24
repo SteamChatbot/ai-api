@@ -60,4 +60,27 @@
         WHERE id = #{id} AND user_id = #{userId} AND deleted = 1
     </update>
 
+    <!-- Redis 만료 후 ai_db 폴백: 기본 정보 + 초기 AI 답변 조회 -->
+    <select id="findBaseByTaskId" resultType="com.sanavi.aiapi.analysis.dto.AnalysisDataDto">
+        SELECT ar.id AS analysisId, ar.base_score, ar.created_at, arc.chat_content
+        FROM analysis_result ar
+        LEFT JOIN analysis_result_chat arc ON arc.result_id = ar.id
+        WHERE ar.id = #{taskId} AND ar.deleted = 1
+        LIMIT 1
+    </select>
+
+    <select id="findChecklistByResultId" resultType="com.sanavi.aiapi.analysis.dto.ChecklistItemDto">
+        SELECT id, label, purpose, method, reason
+        FROM analysis_result_check
+        WHERE result_id = #{resultId}
+    </select>
+
+    <select id="findWarningsByResultId" resultType="string">
+        SELECT warning FROM analysis_result_warning WHERE result_id = #{resultId}
+    </select>
+
+    <select id="findMetaContentsByResultId" resultType="string">
+        SELECT meta_content FROM analysis_result_metacontent WHERE result_id = #{resultId}
+    </select>
+
 </mapper>

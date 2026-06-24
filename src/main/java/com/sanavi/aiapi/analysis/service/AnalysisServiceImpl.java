@@ -76,14 +76,19 @@ public class AnalysisServiceImpl implements AnalysisService {
     @Override
     @Transactional
     public AnalysisResponseDto getAnalysisResult(String taskId) {
+        // ai_db에 완료된 결과가 있으면 바로 반환 (이력 상세보기 경로)
+        if (analysisResultMapper.existsChatByResultId(taskId)) {
+            return loadFromDb(taskId);
+        }
+
+        // ai_db에 없으면 FastAPI 폴링 (분석 진행 중 경로)
         try {
             AnalysisResponseDto response = fastApiClient.get()
                 .uri("/api/analysis/{taskId}", taskId)
                 .retrieve()
                 .body(AnalysisResponseDto.class);
 
-            if ("COMPLETED".equals(response.getStatus()) && response.getData() != null
-                    && !analysisResultMapper.existsChatByResultId(taskId)) {
+            if ("COMPLETED".equals(response.getStatus()) && response.getData() != null) {
                 AnalysisDataDto data = response.getData();
                 analysisResultMapper.updateBaseScore(taskId, data.getBaseScore());
                 analysisResultMapper.insertChat(taskId, data.getChatContent());
@@ -148,6 +153,25 @@ public class AnalysisServiceImpl implements AnalysisService {
         if (affected == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "분석 결과를 찾을 수 없거나 권한이 없습니다.");
         }
+    }
+
+    // Input:  taskId
+    // Output: AnalysisResponseDto (COMPLETED) — Redis 만료 후 ai_db에서 복원
+    // 책임:   FastAPI 404 시 폴백으로 ai_db 직접 조회
+    private AnalysisResponseDto loadFromDb(String taskId) {
+        AnalysisDataDto base = analysisResultMapper.findBaseByTaskId(taskId);
+        if (base == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "존재하지 않는 작업입니다.");
+        }
+        base.setChecklist(analysisResultMapper.findChecklistByResultId(taskId));
+        base.setWarning(analysisResultMapper.findWarningsByResultId(taskId));
+        base.setMetaContent(analysisResultMapper.findMetaContentsByResultId(taskId));
+        return AnalysisResponseDto.builder()
+                .success(true)
+                .status("COMPLETED")
+                .message("분석이 완료되었습니다.")
+                .data(base)
+                .build();
     }
 
     // Input:  FastAPI 에러 응답 body (JSON 문자열)
