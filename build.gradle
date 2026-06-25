@@ -25,6 +25,9 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'           // REST API (Spring MVC, Tomcat 내장)
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'    // Circuit Breaker — FastAPI 장애 시 전파 차단
+	implementation 'org.springframework.boot:spring-boot-starter-aop'           // AOP (LoggingAspect)
+	implementation 'net.logstash.logback:logstash-logback-encoder:7.4'          // JSON 로그 (운영 환경)
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'      // Spring Boot Dashboard 감지 및 모니터링
 	implementation 'org.springframework.boot:spring-boot-starter-security'      // 인증/인가 (JWT 필터 체인, CORS 등)
 	implementation 'org.springframework.boot:spring-boot-starter-validation'    // 요청값 검증 (@Valid, @NotBlank 등)
@@ -34,7 +37,9 @@ dependencies {
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'                           // JWT 생성·파싱 API
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'                             // jjwt 구현체 (런타임만 필요)
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'                          // jjwt JSON 직렬화 (Jackson 연동)
-	compileOnly 'org.projectlombok:lombok'                                      // @Getter/@Setter/@Builder 등 
+	implementation platform('software.amazon.awssdk:bom:2.25.70')              // AWS SDK BOM
+	implementation 'software.amazon.awssdk:s3'                                  // S3 (로그 업로드용)
+	compileOnly 'org.projectlombok:lombok'                                      // @Getter/@Setter/@Builder 등
 	annotationProcessor 'org.projectlombok:lombok'                              // Lombok 컴파일 타임 코드 생성
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'      // JUnit5, Mockito 등 테스트 기본 셋
 	testImplementation 'org.springframework.security:spring-security-test'      // Security 테스트 지원 (@WithMockUser 등)

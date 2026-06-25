@@ -22,6 +22,35 @@ spring:
 ai-fastapi:
   url: ${FASTAPI_URL:http://localhost:8000}
 
+# Circuit Breaker 설정 — FastAPI(온프레미스) 장애가 ai-api 서버로 전이되는 것을 차단
+# 상태 전이: CLOSED → (실패율 50% 초과) → OPEN → (30초 후) → HALF_OPEN → (3개 성공) → CLOSED
+resilience4j:
+  circuitbreaker:
+    instances:
+      fastapi:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10                      # 최근 10개 요청 기준으로 실패율 계산
+        failureRateThreshold: 50                   # 50% 이상 실패 시 OPEN (10개 중 5개 실패)
+        waitDurationInOpenState: 30s               # OPEN 후 30초 대기, 이후 HALF_OPEN으로 전환
+        permittedNumberOfCallsInHalfOpenState: 3   # HALF_OPEN 상태에서 3개 요청으로 회복 여부 판단
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException  # FastAPI 5xx → 장애로 기록
+          - org.springframework.web.client.ResourceAccessException   # 타임아웃·네트워크 단절 → 장애로 기록
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException  # FastAPI 4xx → 클라이언트 책임, 장애 아님
+
+analysis:
+  # true(기본값): 비동기 — taskId만 반환, 클라이언트가 폴링 (스레드 즉시 반환)
+  # false: 동기  — FastAPI 완료될 때까지 스레드 블로킹 (Thread Starvation 재현용)
+  # nGrinder 부하 테스트 시 false로 전환 → 동시 40명에서 TPS 0 수렴 확인
+  # 동기→비동기 전환 근거를 수치로 증명하기 위한 테스트 플래그
+  async: true
+
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET:sanavi-dev-files}
+
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: com.sanavi.aiapi

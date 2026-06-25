@@ -10,7 +10,12 @@ import com.sanavi.aiapi.analysis.dto.AnalysisResultDto;
 import com.sanavi.aiapi.analysis.dto.ChatRequestDto;
 import com.sanavi.aiapi.analysis.dto.ChatResponseDto;
 import com.sanavi.aiapi.analysis.mapper.AnalysisResultMapper;
-import lombok.RequiredArgsConstructor;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -25,99 +30,206 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Collections;
 
+@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AnalysisServiceImpl implements AnalysisService {
 
-    private final RestClient fastApiClient;
+    private final RestClient fastApiRequestClient;
+    private final RestClient fastApiPollClient;
     private final ObjectMapper objectMapper;
     private final AnalysisResultMapper analysisResultMapper;
 
+    public AnalysisServiceImpl(
+            @Qualifier("fastApiRequestClient") RestClient fastApiRequestClient,
+            @Qualifier("fastApiPollClient") RestClient fastApiPollClient,
+            ObjectMapper objectMapper,
+            AnalysisResultMapper analysisResultMapper) {
+        this.fastApiRequestClient = fastApiRequestClient;
+        this.fastApiPollClient = fastApiPollClient;
+        this.objectMapper = objectMapper;
+        this.analysisResultMapper = analysisResultMapper;
+    }
+
+    // true(기본값): 비동기 — taskId 즉시 반환, 스레드 바로 반환
+    // false: 동기 — FastAPI 완료까지 스레드 블로킹 → Thread Starvation 재현용
+    // nGrinder로 false 상태에서 부하 테스트 시 동시 40명에서 TPS 0 수렴 확인 가능
+    @Value("${analysis.async:true}")
+    private boolean asyncMode;
+
     // Input:  AnalysisRequestDto (유저 입력값) + userId (X-User-Id 헤더, 비로그인 시 null)
-    // Output: AnalysisAcceptedDto (task_id, status="PROCESSING")
-    // 책임:   FastAPI에 분석 요청 중계 → task_id 수신 → ai_db analysis_result 초기 레코드 삽입
+    // Output: AnalysisAcceptedDto (task_id, status="PROCESSING" or "COMPLETED")
+    // 책임:   asyncMode에 따라 비동기(즉시 반환) 또는 동기(완료까지 블로킹) 분기
     @Override
-    @Transactional
     public AnalysisAcceptedDto requestAnalysis(AnalysisRequestDto request, String userId) {
-        try {
-            AnalysisAcceptedDto accepted = fastApiClient.post()
-                .uri("/api/analysis")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(request)
-                .retrieve()
-                .body(AnalysisAcceptedDto.class);
-
-            String resolvedUserId = (userId != null && !userId.isBlank()) ? userId : null;
-
-            analysisResultMapper.insertAnalysisResult(
-                AnalysisResultDto.builder()
-                    .id(accepted.getTaskId())
-                    .userId(resolvedUserId)
-                    .disease(request.getDisease())
-                    .inspector(request.getInspector())
-                    .job(request.getJob())
-                    .baseScore(0)
-                    .createdAt(LocalDateTime.now())
-                    .deleted(1)
-                    .build()
-            );
-
+        String resolvedUserId = (userId != null && !userId.isBlank()) ? userId : null;
+        if (asyncMode) {
+            AnalysisAcceptedDto accepted = callFastApiRequest(request);
+            saveInitialAnalysisResult(accepted.getTaskId(), resolvedUserId, request);
             return accepted;
+        }
+        return requestSync(request, resolvedUserId);
+    }
 
+    // 동기 처리 — FastAPI 완료될 때까지 스레드를 블로킹
+    // asyncMode=false 일 때만 호출 — 운영 환경에서는 사용 금지
+    // Thread Starvation 재현: Tomcat 기본 스레드 200개 / 80초 = 초당 2.5req 처리 한계
+    //   → 동시 40명 요청 시 스레드 풀 고갈, TPS 0 수렴
+    private AnalysisAcceptedDto requestSync(AnalysisRequestDto request, String userId) {
+        AnalysisAcceptedDto accepted = callFastApiRequest(request);
+        saveInitialAnalysisResult(accepted.getTaskId(), userId, request);
+
+        // FastAPI 완료될 때까지 2초 간격으로 폴링 — 이 루프가 스레드를 점유
+        int maxAttempts = 60; // 최대 120초 대기
+        for (int i = 0; i < maxAttempts; i++) {
+            try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            AnalysisResponseDto response = pollFastApi(accepted.getTaskId());
+            if ("COMPLETED".equals(response.getStatus()) && response.getData() != null) {
+                saveCompletedResult(accepted.getTaskId(), response.getData());
+                log.info("[{}] 동기 분석 완료 — taskId={} attempt={}", MDC.get("traceId"), accepted.getTaskId(), i + 1);
+                return accepted;
+            }
+        }
+        log.error("[{}] 동기 분석 타임아웃 — taskId={}", MDC.get("traceId"), accepted.getTaskId());
+        throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "AI 분석 시간이 초과되었습니다.");
+    }
+
+    private AnalysisAcceptedDto callFastApiRequest(AnalysisRequestDto request) {
+        long start = System.currentTimeMillis();
+        try {
+            // Circuit Breaker가 OPEN이면 rawCallFastApiRequest()를 호출하지 않고 즉시 CallNotPermittedException 던짐
+            AnalysisAcceptedDto result = rawCallFastApiRequest(request);
+            log.info("[{}] FastAPI 분석 요청 완료 — taskId={} {}ms",
+                    MDC.get("traceId"), result.getTaskId(), System.currentTimeMillis() - start);
+            return result;
         } catch (HttpClientErrorException e) {
+            // 4xx — 클라이언트 입력 오류, FastAPI 장애 아님 → Circuit Breaker 실패 카운트에 포함 안 됨
+            log.warn("[{}] FastAPI 분석 요청 실패 — status={} {}ms",
+                    MDC.get("traceId"), e.getStatusCode(), System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
         } catch (HttpServerErrorException e) {
+            // 5xx — FastAPI 서버 내부 오류 → Circuit Breaker 실패로 기록
+            log.error("[{}] FastAPI 서버 오류 — {}ms", MDC.get("traceId"), System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI 서버 오류: " + extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
+            // 타임아웃·네트워크 단절 → Circuit Breaker 실패로 기록
+            log.error("[{}] FastAPI 연결 불가 (타임아웃 or 네트워크) — {}ms",
+                    MDC.get("traceId"), System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
+        } catch (CallNotPermittedException e) {
+            // Circuit Breaker OPEN 상태 — FastAPI가 불안정하므로 호출 자체를 차단
+            // 30초 후 HALF_OPEN으로 전환되어 소수 요청으로 회복 여부 판단
+            log.error("[{}] [Circuit Breaker OPEN] FastAPI 호출 차단 — 장애 전파 방지 — {}ms",
+                    MDC.get("traceId"), System.currentTimeMillis() - start);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버가 일시적으로 이용 불가합니다. 잠시 후 다시 시도해주세요.");
         }
+    }
+
+    // Circuit Breaker 적용 지점 — 예외가 래핑되기 전 원본 예외를 정확히 분류
+    // recordExceptions: HttpServerErrorException, ResourceAccessException (FastAPI 장애)
+    // ignoreExceptions: HttpClientErrorException (클라이언트 책임 → 장애 카운트 제외)
+    @CircuitBreaker(name = "fastapi")
+    private AnalysisAcceptedDto rawCallFastApiRequest(AnalysisRequestDto request) {
+        return fastApiRequestClient.post()
+            .uri("/api/analysis")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(request)
+            .retrieve()
+            .body(AnalysisAcceptedDto.class);
+    }
+
+    // 격리수준: REPEATABLE_READ (MariaDB 기본값)
+    // HTTP 호출 완료 후 짧게 트랜잭션 열어 INSERT만 처리 — 커넥션 점유 시간 최소화
+    @Transactional
+    public void saveInitialAnalysisResult(String taskId, String userId, AnalysisRequestDto request) {
+        analysisResultMapper.insertAnalysisResult(
+            AnalysisResultDto.builder()
+                .id(taskId)
+                .userId(userId)
+                .disease(request.getDisease())
+                .inspector(request.getInspector())
+                .job(request.getJob())
+                .baseScore(0)
+                .createdAt(LocalDateTime.now())
+                .deleted(1)
+                .build()
+        );
     }
 
     // Input:  taskId (UUID) 작업아이디16자리 랜덤 문자열
     // Output: AnalysisResponseDto (status + data) data-> chatcontet,checklist...
-    // 책임:   FastAPI Redis에서 결과 폴링 → COMPLETED 첫 수신 시 ai_db에 결과 저장 (중복 저장 방지)
+    // 책임:   DB에 완료 결과 있으면 바로 반환 / 없으면 FastAPI 폴링(트랜잭션 밖) → COMPLETED 시 DB 저장(트랜잭션 안)
     @Override
-    @Transactional
     public AnalysisResponseDto getAnalysisResult(String taskId) {
-        // ai_db에 완료된 결과가 있으면 바로 반환 (이력 상세보기 경로)
-        if (analysisResultMapper.existsChatByResultId(taskId)) {
+        if (isResultStoredInDb(taskId)) {
             return loadFromDb(taskId);
         }
 
-        // ai_db에 없으면 FastAPI 폴링 (분석 진행 중 경로)
+        AnalysisResponseDto response = pollFastApi(taskId);
+
+        if ("COMPLETED".equals(response.getStatus()) && response.getData() != null) {
+            saveCompletedResult(taskId, response.getData());
+        }
+
+        return response;
+    }
+
+    // 격리수준: REPEATABLE_READ / readOnly — 단순 존재 여부 확인용, 쓰기 락 불필요
+    @Transactional(readOnly = true)
+    public boolean isResultStoredInDb(String taskId) {
+        return analysisResultMapper.existsChatByResultId(taskId);
+    }
+
+    private AnalysisResponseDto pollFastApi(String taskId) {
+        long start = System.currentTimeMillis();
         try {
-            AnalysisResponseDto response = fastApiClient.get()
-                .uri("/api/analysis/{taskId}", taskId)
-                .retrieve()
-                .body(AnalysisResponseDto.class);
-
-            if ("COMPLETED".equals(response.getStatus()) && response.getData() != null) {
-                AnalysisDataDto data = response.getData();
-                analysisResultMapper.updateBaseScore(taskId, data.getBaseScore());
-                analysisResultMapper.insertChat(taskId, data.getChatContent());
-
-                List checklist = data.getChecklist();
-                if (checklist != null && !checklist.isEmpty())
-                    analysisResultMapper.insertChecklist(taskId, checklist);
-
-                List warnings = data.getWarning();
-                if (warnings != null && !warnings.isEmpty())
-                    analysisResultMapper.insertWarnings(taskId, warnings);
-
-                List metaContents = data.getMetaContent();
-                if (metaContents != null && !metaContents.isEmpty())
-                    analysisResultMapper.insertMetaContents(taskId, metaContents);
-            }
-
+            AnalysisResponseDto response = rawPollFastApi(taskId);
+            // 폴링 결과 상태 로그 — PROCESSING이 얼마나 오래 지속되는지 추적 가능
+            log.info("[{}] FastAPI 폴링 결과 — taskId={} status={} {}ms",
+                    MDC.get("traceId"), taskId, response.getStatus(), System.currentTimeMillis() - start);
             return response;
-
         } catch (HttpClientErrorException e) {
+            log.warn("[{}] FastAPI 폴링 실패 — taskId={} status={} {}ms",
+                    MDC.get("traceId"), taskId, e.getStatusCode(), System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.valueOf(e.getStatusCode().value()), extractDetail(e.getResponseBodyAsString()));
         } catch (HttpServerErrorException e) {
+            log.error("[{}] FastAPI 서버 오류 — taskId={} {}ms",
+                    MDC.get("traceId"), taskId, System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "AI 서버 오류: " + extractDetail(e.getResponseBodyAsString()));
         } catch (ResourceAccessException e) {
+            log.error("[{}] FastAPI 연결 불가 — taskId={} {}ms",
+                    MDC.get("traceId"), taskId, System.currentTimeMillis() - start);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버에 연결할 수 없습니다.");
+        } catch (CallNotPermittedException e) {
+            log.error("[{}] [Circuit Breaker OPEN] FastAPI 폴링 차단 — taskId={} {}ms",
+                    MDC.get("traceId"), taskId, System.currentTimeMillis() - start);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AI 서버가 일시적으로 이용 불가합니다. 잠시 후 다시 시도해주세요.");
         }
+    }
+
+    @CircuitBreaker(name = "fastapi")
+    private AnalysisResponseDto rawPollFastApi(String taskId) {
+        return fastApiPollClient.get()
+            .uri("/api/analysis/{taskId}", taskId)
+            .retrieve()
+            .body(AnalysisResponseDto.class);
+    }
+
+    @Transactional
+    public void saveCompletedResult(String taskId, AnalysisDataDto data) {
+        analysisResultMapper.updateBaseScore(taskId, data.getBaseScore());
+        analysisResultMapper.insertChat(taskId, data.getChatContent());
+
+        List checklist = data.getChecklist();
+        if (checklist != null && !checklist.isEmpty())
+            analysisResultMapper.insertChecklist(taskId, checklist);
+
+        List warnings = data.getWarning();
+        if (warnings != null && !warnings.isEmpty())
+            analysisResultMapper.insertWarnings(taskId, warnings);
+
+        List metaContents = data.getMetaContent();
+        if (metaContents != null && !metaContents.isEmpty())
+            analysisResultMapper.insertMetaContents(taskId, metaContents);
     }
 
     // Input:  ChatRequestDto (context, history, question)
@@ -126,7 +238,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     @Override
     public ChatResponseDto chatWithAdvisor(ChatRequestDto request) {
         try {
-            return fastApiClient.post()
+            return fastApiRequestClient.post()
                 .uri("/api/analysis/chat")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(request)

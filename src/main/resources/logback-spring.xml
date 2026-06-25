@@ -1,0 +1,60 @@
+<configuration>
+
+    <!-- 개발 환경: 콘솔에 텍스트로 출력 -->
+    <springProfile name="default,local,dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <!-- [시간] [traceId] LEVEL Logger — 메시지 -->
+                <pattern>%d{HH:mm:ss} [%X{traceId}] %highlight(%-5level) %logger{40} — %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <!-- 개발 환경에서만 MyBatis SQL 쿼리 DEBUG로 출력 — 운영에선 INFO로 덮어써짐 -->
+        <logger name="com.sanavi" level="DEBUG"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- 운영 환경: 로컬 파일(JSON) + S3 동시 적재
+         docker-compose.yml의 environment에 아래 항목 추가 필요
+           SPRING_PROFILES_ACTIVE: prod
+           AWS_S3_BUCKET: sanavi-prod-files
+           AWS_REGION: ap-northeast-2
+    -->
+    <springProfile name="prod">
+
+        <!-- application.yml의 aws.* 값을 logback 변수로 가져옴 -->
+        <springProperty name="s3Bucket" source="aws.s3.bucket" defaultValue="sanavi-dev-files"/>
+        <springProperty name="s3Region" source="aws.region" defaultValue="ap-northeast-2"/>
+
+        <!-- 로컬 파일: JSON 형식으로 저장 (장애 시 백업 + CloudWatch Agent 연동 가능) -->
+        <appender name="FILE_JSON" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/sanavi-ai-api.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <!-- 하루 단위 롤링, 30일 보관 -->
+                <fileNamePattern>logs/sanavi-ai-api.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>30</maxHistory>
+            </rollingPolicy>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- MDC의 traceId가 JSON 필드로 자동 포함됨 -->
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+            </encoder>
+        </appender>
+
+        <!-- S3: 50줄마다 log/sanavi-ai-api/{날짜}/{시간}-{uuid}.log 로 업로드 -->
+        <appender name="S3" class="com.sanavi.aiapi.common.logging.S3LogAppender">
+            <bucketName>${s3Bucket}</bucketName>
+            <region>${s3Region}</region>
+            <folderPath>log/sanavi-ai-api</folderPath>
+            <flushThreshold>50</flushThreshold>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="FILE_JSON"/>
+            <appender-ref ref="S3"/>
+        </root>
+    </springProfile>
+
+</configuration>
