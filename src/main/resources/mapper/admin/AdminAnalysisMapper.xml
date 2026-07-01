@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sanavi.aiapi.admin.mapper.AdminAnalysisMapper">
+
+    <!-- 전체 회원 분석이력 (소유자 무관) -->
+    <sql id="adminAnalysisWhere">
+        WHERE deleted = 1
+        <if test="keyword != null and keyword != ''">
+            AND (
+                user_id LIKE CONCAT('%', #{keyword}, '%')
+                OR disease LIKE CONCAT('%', #{keyword}, '%')
+                OR job LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="scoreFilter == 'high'">AND base_score &gt;= 75</if>
+        <if test="scoreFilter == 'mid'">AND base_score &gt;= 50 AND base_score &lt; 75</if>
+        <if test="scoreFilter == 'low'">AND base_score &lt; 50</if>
+    </sql>
+
+    <select id="selectAdminAnalysisList" resultType="com.sanavi.aiapi.admin.dto.AdminAnalysisItemDto">
+        SELECT id, user_id AS userId, disease, job, base_score AS baseScore, created_at AS createdAt
+        FROM analysis_result
+        <include refid="adminAnalysisWhere"/>
+        ORDER BY created_at DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="selectAdminAnalysisCount" resultType="int">
+        SELECT COUNT(*) FROM analysis_result
+        <include refid="adminAnalysisWhere"/>
+    </select>
+
+    <select id="selectAdminAnalysisAverage" resultType="java.lang.Double">
+        SELECT AVG(base_score) FROM analysis_result
+        <include refid="adminAnalysisWhere"/>
+    </select>
+
+    <update id="forceSoftDeleteById">
+        UPDATE analysis_result
+        SET deleted = 0
+        WHERE id = #{id}
+          AND deleted = 1
+    </update>
+
+    <!-- 관리자 통계 — 일별(최근 7일)/월별(최근 6개월) 분석횟수 추이. 날짜 경계(startDate)는 서비스 레이어(Java)에서 계산해 전달 -->
+    <select id="selectAnalysisTrend" resultType="com.sanavi.aiapi.admin.dto.TrendPointDto">
+        <choose>
+            <when test="range == 'monthly'">
+                SELECT DATE_FORMAT(created_at, '%Y-%m') AS label, COUNT(*) AS count
+                FROM analysis_result
+                WHERE deleted = 1
+                  AND created_at >= #{startDate}
+                GROUP BY label
+                ORDER BY label
+            </when>
+            <otherwise>
+                SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS label, COUNT(*) AS count
+                FROM analysis_result
+                WHERE deleted = 1
+                  AND created_at >= #{startDate}
+                GROUP BY label
+                ORDER BY label
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 관리자 통계 — 질병/직업별 TOP 랭킹. ${by}는 서비스에서 "disease"/"job"만 허용하도록 검증된 값만 전달됨 -->
+    <select id="selectAnalysisRanking" resultType="com.sanavi.aiapi.admin.dto.TrendPointDto">
+        SELECT ${by} AS label, COUNT(*) AS count
+        FROM analysis_result
+        WHERE deleted = 1
+        GROUP BY ${by}
+        ORDER BY count DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 관리자 다중필터 조합 검색 — backend-springboot가 main_db(구독여부·유저타입·직업)로 먼저 추려낸
+         userIds에 대해, 기간 내 분석 요청 총건수만 집계. userIds는 항상 비어있지 않은 상태로 호출됨
+         (서비스 레이어에서 빈 리스트면 이 쿼리를 호출하지 않고 0으로 단락 처리) -->
+    <select id="selectAnalysisCountForUsers" resultType="int">
+        SELECT COUNT(*)
+        FROM analysis_result
+        WHERE deleted = 1
+          AND created_at >= #{startDate}
+          AND user_id IN
+        <foreach collection="userIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
