@@ -31,4 +31,10 @@ public class AnalysisDataDto {
     private List<String> metaContent; //참고판례데이터 list 추후 추가된다면 Dto별도설정필요
 
     private LocalDateTime createdAt; //생성시간
+
+    // 2026-07-09 추가 — DB(loadFromDb) 경로에서 조회 시 비어있어서 프론트 상세페이지/PDF에 직업·질병명이
+    // 안 나오던 문제 수정. FastAPI 즉시응답(pollFastApi) 경로는 원래 값이 채워져 있을 수 있어 필드만 추가.
+    private String job;
+    private String disease;
+    private String inspector;
 }
