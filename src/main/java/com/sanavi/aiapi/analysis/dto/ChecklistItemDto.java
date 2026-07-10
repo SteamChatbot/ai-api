@@ -18,4 +18,5 @@ public class ChecklistItemDto {
     private String purpose; //목적
     private String method; //방법
     private String reason; //이유
+    private boolean checked; // 체크 여부
 }

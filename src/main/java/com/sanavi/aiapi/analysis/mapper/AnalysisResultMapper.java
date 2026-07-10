@@ -12,17 +12,37 @@ import java.util.List;
 @Mapper
 public interface AnalysisResultMapper {
     void insertAnalysisResult(AnalysisResultDto dto);
+
     void updateBaseScore(@Param("id") String id, @Param("baseScore") float baseScore);
+
     boolean existsChatByResultId(@Param("resultId") String resultId);
+
     void insertChat(@Param("resultId") String resultId, @Param("chat_content") String chat_content);
+
     void insertChecklist(@Param("resultId") String resultId, @Param("items") List<ChecklistItemDto> items);
+
     void insertWarnings(@Param("resultId") String resultId, @Param("warnings") List<String> warnings);
+
     void insertMetaContents(@Param("resultId") String resultId, @Param("metaContents") List<String> metaContents);
+
     List<AnalysisHistoryItemDto> findHistoryByUserId(@Param("userId") String userId);
+
     int softDeleteById(@Param("id") String id, @Param("userId") String userId);
 
     AnalysisDataDto findBaseByTaskId(@Param("taskId") String taskId);
+
     List<ChecklistItemDto> findChecklistByResultId(@Param("resultId") String resultId);
+
     List<String> findWarningsByResultId(@Param("resultId") String resultId);
+
     List<String> findMetaContentsByResultId(@Param("resultId") String resultId);
+
+    boolean existsOwnedResult(
+            @Param("taskId") String taskId,
+            @Param("userId") String userId);
+
+    int updateChecklistChecked(
+            @Param("taskId") String taskId,
+            @Param("checkId") int checkId,
+            @Param("checked") boolean checked);
 }
