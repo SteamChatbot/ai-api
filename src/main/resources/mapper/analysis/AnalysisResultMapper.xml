@@ -69,10 +69,18 @@
         LIMIT 1
     </select>
 
-    <select id="findChecklistByResultId" resultType="com.sanavi.aiapi.analysis.dto.ChecklistItemDto">
-        SELECT id, label, purpose, method, reason
+    <select id="findChecklistByResultId"
+            resultType="com.sanavi.aiapi.analysis.dto.ChecklistItemDto">
+        SELECT
+            id,
+            label,
+            purpose,
+            method,
+            reason,
+            checked
         FROM analysis_result_check
         WHERE result_id = #{resultId}
+        ORDER BY id
     </select>
 
     <select id="findWarningsByResultId" resultType="string">
@@ -83,4 +91,18 @@
         SELECT meta_content FROM analysis_result_metacontent WHERE result_id = #{resultId}
     </select>
 
+    <select id="existsOwnedResult" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM analysis_result
+        WHERE id = #{taskId}
+        AND user_id = #{userId}
+        AND deleted = 1
+    </select>
+
+    <update id="updateChecklistChecked">
+        UPDATE analysis_result_check
+        SET checked = #{checked}
+        WHERE id = #{checkId}
+        AND result_id = #{taskId}
+    </update>
 </mapper>
