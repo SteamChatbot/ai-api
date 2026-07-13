@@ -2,6 +2,7 @@ package com.sanavi.aiapi.analysis.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,5 +22,5 @@ public class AnalysisRequestDto {
     @NotNull  private Integer age; //유저나이
     @NotBlank private String job; //유저 직업(직종)
     @NotBlank private String disease; //유저 질병명
-    @NotBlank private String inspector; //유저 사고경위
+    @NotBlank @Size(max = 1000, message = "사고경위는 1000자 이내로 입력해주세요.") private String inspector; //유저 사고경위
 }
